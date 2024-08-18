@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jack Black</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            margin-top: 50px;
+        }
+        .balance, .message, .hand {
+            margin: 20px;
+            font-size: 24px;
+        }
+        .bet-container {
+            margin: 20px;
+        }
+        .bet-label {
+            font-size: 18px;
+            margin-right: 10px;
+        }
+        .bet {
+            font-size: 18px;
+            margin: 10px;
+            width: 100px;
+            text-align: center;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 18px;
+            cursor: pointer;
+            margin-top: 20px;
+            background-color: #34495e;
+            border: none;
+            color: #ecf0f1;
+            border-radius: 5px;
+        }
+        button:hover {
+            background-color: #2c3e50;
+        }
+        .cards {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .card {
+            font-size: 40px;
+            background-color: #ecf0f1;
+            color: #2c3e50;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .hidden {
+            visibility: hidden;
+        }
+        .disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Jack Black 🃏</h1>
+        <div class="balance">Account Balance: $<span id="balance">1000</span></div>
+        <div class="message"></div>
+        <div class="hand">
+            <div>Your Hand: <span id="player-hand" class="cards"></span> (Value: <span id="player-value">0</span>)</div>
+            <div>Dealer's Hand: <span id="dealer-hand" class="cards"></span> (Value: <span id="dealer-value" class="hidden">0</span>)</div>
+        </div>
+
+        <div class="bet-container">
+            <label for="bet" class="bet-label">Bet Amount:</label>
+            <input type="number" id="bet" class="bet" placeholder="Enter Bet Amount" min="1" value="10">
+        </div>
+
+        <button id="place-bet-button" onclick="placeBet()">Place Bet</button>
+        <button id="hit-button" class="hidden" onclick="hit()">Hit</button>
+        <button id="stand-button" class="hidden" onclick="stand()">Stand</button>
+        <button id="add-money-button" class="visible" onclick="addMoney()">Add $1</button>
+    </div>
+
+    <script>
+        const suits = ['♠', '♥', '♦', '♣'];
+        const values = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+        const cardValues = { '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 10, 'Q': 10, 'K': 10, 'A': 11 };
+
+        let balance = getCookie('balance') || 1000;
+        let bet = 0;
+        let playerHand = [];
+        let dealerHand = [];
+        let isGameInProgress = false;
+
+        document.getElementById('balance').textContent = balance;
+        updateAddMoneyButton(); // Update button state based on initial balance
+
+        function getCookie(name) {
+            let matches = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()[\]\\/+^])/g, '\\$1') + '=([^;]*)'));
+            return matches ? decodeURIComponent(matches[1]) : null;
+        }
+
+        function setCookie(name, value, options = {}) {
+            options = {
+                path: '/',
+                ...options
+            };
+            if (options.expires instanceof Date) {
+                options.expires = options.expires.toUTCString();
+            }
+            let updatedCookie = encodeURIComponent(name) + "=" + encodeURIComponent(value);
+            for (let optionKey in options) {
+                updatedCookie += "; " + optionKey;
+                let optionValue = options[optionKey];
+                if (optionValue !== true) {
+                    updatedCookie += "=" + optionValue;
+                }
+            }
+            document.cookie = updatedCookie;
+        }
+
+        function updateBalance(amount) {
+            balance = parseInt(balance) + amount;
+            document.getElementById('balance').textContent = balance;
+            setCookie('balance', balance, { 'max-age': 3600 });
+            updateAddMoneyButton(); // Update button state after balance change
+        }
+
+        function addMoney() {
+            if (balance < 100) {
+                updateBalance(1);
+            }
+        }
+
+        function updateAddMoneyButton() {
+            const addMoneyButton = document.getElementById('add-money-button');
+            if (balance >= 100) {
+                addMoneyButton.classList.add('disabled');
+                addMoneyButton.disabled = true;
+            } else {
+                addMoneyButton.classList.remove('disabled');
+                addMoneyButton.disabled = false;
+            }
+        }
+
+        function getRandomCard() {
+            const suit = suits[Math.floor(Math.random() * suits.length)];
+            const value = values[Math.floor(Math.random() * values.length)];
+            return { suit, value };
+        }
+
+        function calculateHandValue(hand) {
+            let value = 0;
+            let numAces = 0;
+            for (let card of hand) {
+                value += cardValues[card.value];
+                if (card.value === 'A') numAces++;
+            }
+            while (value > 21 && numAces > 0) {
+                value -= 10;
+                numAces--;
+            }
+            return value;
+        }
+
+        function displayHand(hand, elementId) {
+            const handElement = document.getElementById(elementId);
+            handElement.innerHTML = hand.map(card => `${card.value}${card.suit}`).join(' '); // Show value and suit
+        }
+
+        function updateHandValues() {
+            const playerValue = calculateHandValue(playerHand);
+            document.getElementById('player-value').textContent = playerValue;
+
+            if (!isGameInProgress) {
+                // Hide dealer's value while the game is in progress
+                document.getElementById('dealer-value').classList.add('hidden');
+            }
+        }
+
+        function dealInitialHands() {
+            playerHand = [getRandomCard(), getRandomCard()];
+            dealerHand = [getRandomCard(), getRandomCard()];
+            displayHand(playerHand, 'player-hand');
+            displayHand([dealerHand[0]], 'dealer-hand'); // Show only one card of dealer's hand
+            updateHandValues();
+        }
+
+        function placeBet() {
+            if (isGameInProgress) {
+                alert("Game is already in progress.");
+                return;
+            }
+
+            bet = parseInt(document.getElementById('bet').value);
+            if (bet <= 0 || bet > balance) {
+                alert("Invalid bet amount or insufficient balance.");
+                return;
+            }
+
+            updateBalance(-bet);
+            isGameInProgress = true;
+            dealInitialHands();
+
+            document.getElementById('place-bet-button').classList.add('hidden');
+            document.getElementById('hit-button').classList.remove('hidden');
+            document.getElementById('stand-button').classList.remove('hidden');
+            document.getElementById('bet').setAttribute('readonly', true); // Lock the bet amount input during game
+            document.getElementById('add-money-button').classList.add('disabled'); // Hide the add money button during the game
+            document.getElementById('add-money-button').disabled = true;
+        }
+
+        function hit() {
+            if (!isGameInProgress) {
+                alert("No game in progress.");
+                return;
+            }
+
+            playerHand.push(getRandomCard());
+            displayHand(playerHand, 'player-hand');
+
+            const playerValue = calculateHandValue(playerHand);
+            updateHandValues();
+            if (playerValue > 21) {
+                endGame("Bust! Dealer wins.");
+            }
+        }
+
+        function stand() {
+            if (!isGameInProgress) {
+                alert("No game in progress.");
+                return;
+            }
+
+            let dealerValue = calculateHandValue(dealerHand);
+            while (dealerValue < 17) {
+                dealerHand.push(getRandomCard());
+                dealerValue = calculateHandValue(dealerHand);
+            }
+            displayHand(dealerHand, 'dealer-hand');
+            document.getElementById('dealer-value').textContent = dealerValue; // Show dealer's value
+            document.getElementById('dealer-value').classList.remove('hidden'); // Show dealer's value
+            updateHandValues();
+
+            const playerValue = calculateHandValue(playerHand);
+            let message = "";
+
+            if (playerValue > 21) {
+                message = "Bust! Dealer wins.";
+            } else if (dealerValue > 21 || playerValue > dealerValue) {
+                message = "You win!";
+                updateBalance(bet * 2);
+            } else if (playerValue === dealerValue) {
+                message = "Push.";
+                updateBalance(bet);
+            } else {
+                message = "Dealer wins.";
+            }
+
+            endGame(message);
+        }
+
+        function endGame(message) {
+            document.querySelector('.message').textContent = message;
+            document.getElementById('hit-button').classList.add('hidden');
+            document.getElementById('stand-button').classList.add('hidden');
+            document.getElementById('add-money-button').classList.remove('disabled'); // Show the button after the round
+            document.getElementById('add-money-button').disabled = false;
+            document.getElementById('place-bet-button').classList.remove('hidden');
+            document.getElementById('bet').removeAttribute('readonly'); // Unlock the bet amount input after game
+            isGameInProgress = false;
+        }
+    </script>
+</body>
+</html>

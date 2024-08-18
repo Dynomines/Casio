@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Poke</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            margin-top: 50px;
+        }
+        .balance, .message {
+            margin: 20px;
+            font-size: 24px;
+        }
+        .cards {
+            margin: 20px;
+            font-size: 40px;
+        }
+        .bet-container {
+            margin: 20px;
+        }
+        .bet-label {
+            font-size: 18px;
+            margin-right: 10px;
+        }
+        .bet {
+            font-size: 18px;
+            margin: 10px;
+            width: 100px;
+            text-align: center;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 18px;
+            cursor: pointer;
+            margin-top: 20px;
+            background-color: #34495e;
+            border: none;
+            color: #ecf0f1;
+            border-radius: 5px;
+        }
+        button:hover {
+            background-color: #2c3e50;
+        }
+        .hidden {
+            display: none;
+        }
+        .disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Three Card Poke 🃏</h1>
+        <div class="balance">Account Balance: $<span id="balance">1000</span></div>
+        <div class="message"></div>
+        <div class="cards">
+            <div id="player-cards"></div>
+            <div id="dealer-cards"></div>
+        </div>
+
+        <div class="bet-container">
+            <label for="ante" class="bet-label">Ante Bet:</label>
+            <input type="number" id="ante" class="bet" placeholder="Enter Ante Bet" min="1" value="10">
+        </div>
+        <div class="bet-container">
+            <label for="pair-plus" class="bet-label">Pair Plus Bet:</label>
+            <input type="number" id="pair-plus" class="bet" placeholder="Enter Pair Plus Bet" min="0" value="0">
+        </div>
+
+        <button id="place-bet-button" onclick="placeBets()">Place Bet</button>
+        <button id="play-button" class="hidden" onclick="playHand()">Play</button>
+        <button id="fold-button" class="hidden" onclick="foldHand()">Fold</button>
+        <button id="add-money-button" class="visible" onclick="addMoney()">Add $1</button>
+    </div>
+
+    <script>
+        const suits = ['♠', '♥', '♦', '♣'];
+        const values = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+
+        let balance = getCookie('balance') || 1000;
+        let isGameInProgress = false;
+        document.getElementById('balance').textContent = balance;
+        updateAddMoneyButton(); // Update button state based on initial balance
+
+        function getCookie(name) {
+            let matches = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()[\]\\/+^])/g, '\\$1') + '=([^;]*)'));
+            return matches ? decodeURIComponent(matches[1]) : null;
+        }
+
+        function setCookie(name, value, options = {}) {
+            options = {
+                path: '/',
+                ...options
+            };
+            if (options.expires instanceof Date) {
+                options.expires = options.expires.toUTCString();
+            }
+            let updatedCookie = encodeURIComponent(name) + "=" + encodeURIComponent(value);
+            for (let optionKey in options) {
+                updatedCookie += "; " + optionKey;
+                let optionValue = options[optionKey];
+                if (optionValue !== true) {
+                    updatedCookie += "=" + optionValue;
+                }
+            }
+            document.cookie = updatedCookie;
+        }
+
+        function updateBalance(amount) {
+            balance = parseInt(balance) + amount;
+            document.getElementById('balance').textContent = balance;
+            setCookie('balance', balance, { 'max-age': 3600 });
+            updateAddMoneyButton(); // Update button state after balance change
+        }
+
+        function addMoney() {
+            if (balance < 100) {
+                updateBalance(1);
+            }
+        }
+
+        function updateAddMoneyButton() {
+            const addMoneyButton = document.getElementById('add-money-button');
+            if (balance >= 100) {
+                addMoneyButton.classList.add('disabled');
+                addMoneyButton.disabled = true;
+            } else {
+                addMoneyButton.classList.remove('disabled');
+                addMoneyButton.disabled = false;
+            }
+        }
+
+        function getRandomCard() {
+            const suit = suits[Math.floor(Math.random() * suits.length)];
+            const value = values[Math.floor(Math.random() * values.length)];
+            return { suit, value };
+        }
+
+        function getHand() {
+            return [getRandomCard(), getRandomCard(), getRandomCard()];
+        }
+
+        function getHandRank(hand) {
+            const handValues = hand.map(card => values.indexOf(card.value)).sort((a, b) => a - b);
+            const isFlush = hand.every(card => card.suit === hand[0].suit);
+            const isStraight = (handValues[2] - handValues[0] === 2) && (new Set(handValues).size === 3);
+
+            if (isStraight && isFlush) return 5; // Straight Flush
+            if (new Set(handValues).size === 1) return 4; // Three of a Kind
+            if (isFlush) return 3; // Flush
+            if (isStraight) return 2; // Straight
+            if (new Set(handValues).size === 2) return 1; // Pair
+            return 0; // High Card
+        }
+
+        function getHandRankName(rank) {
+            switch (rank) {
+                case 5: return "Straight Flush";
+                case 4: return "Three of a Kind";
+                case 3: return "Flush";
+                case 2: return "Straight";
+                case 1: return "Pair";
+                default: return "High Card";
+            }
+        }
+
+        function compareHands(playerHand, dealerHand) {
+            const playerRank = getHandRank(playerHand);
+            const dealerRank = getHandRank(dealerHand);
+
+            if (playerRank > dealerRank) return 1; // Player wins
+            if (playerRank < dealerRank) return -1; // Dealer wins
+
+            // If ranks are the same, compare high cards
+            const playerValues = playerHand.map(card => values.indexOf(card.value)).sort((a, b) => b - a);
+            const dealerValues = dealerHand.map(card => values.indexOf(card.value)).sort((a, b) => b - a);
+
+            for (let i = 0; i < 3; i++) {
+                if (playerValues[i] > dealerValues[i]) return 1;
+                if (playerValues[i] < dealerValues[i]) return -1;
+            }
+
+            return 0; // Tie
+        }
+
+        let anteBet = 0;
+        let pairPlusBet = 0;
+        let playerHand = [];
+        let dealerHand = [];
+
+        function placeBets() {
+            if (isGameInProgress) {
+                alert("Cannot change bets during the game.");
+                return;
+            }
+
+            anteBet = parseInt(document.getElementById('ante').value);
+            pairPlusBet = parseInt(document.getElementById('pair-plus').value);
+
+            const totalRequired = anteBet + pairPlusBet;
+
+            if (anteBet < 1) {
+                alert("Invalid Ante bet amount.");
+                return;
+            }
+
+            if (pairPlusBet < 0) {
+                alert("Invalid Pair Plus bet amount.");
+                return;
+            }
+
+            if (totalRequired > balance) {
+                alert("Insufficient balance to place these bets.");
+                return;
+            }
+
+            updateBalance(-(totalRequired));
+
+            playerHand = getHand();
+            dealerHand = getHand();
+
+            document.getElementById('player-cards').innerHTML = `Your Hand: 
+                ${playerHand[0].value}${playerHand[0].suit} 
+                ${playerHand[1].value}${playerHand[1].suit} 
+                ${playerHand[2].value}${playerHand[2].suit}`;
+
+            document.getElementById('play-button').classList.remove('hidden');
+            document.getElementById('fold-button').classList.remove('hidden');
+            document.getElementById('add-money-button').classList.add('hidden'); // Hide the button during the round
+            disableBetInputs(true); // Disable inputs during the turn
+            isGameInProgress = true;
+        }
+
+        function disableBetInputs(disable) {
+            document.getElementById('ante').disabled = disable;
+            document.getElementById('pair-plus').disabled = disable;
+            document.getElementById('place-bet-button').classList.toggle('disabled', disable);
+        }
+
+        function playHand() {
+            if (!isGameInProgress) {
+                alert("No game in progress.");
+                return;
+            }
+
+            document.getElementById('play-button').classList.add('hidden');
+            document.getElementById('fold-button').classList.add('hidden');
+
+            let message = "";
+            let winnings = 0;
+
+            // Deduct the Ante bet again when the player plays
+            updateBalance(-anteBet);
+
+            // Pair Plus Bet
+            const playerRank = getHandRank(playerHand);
+            if (pairPlusBet > 0 && playerRank >= 1) {
+                const pairPlusPayouts = [1, 4, 6, 30, 40];
+                const pairPlusWinnings = pairPlusBet * pairPlusPayouts[playerRank - 1];
+                winnings += pairPlusWinnings;
+                message += `Pair Plus wins $${pairPlusWinnings} for a ${getHandRankName(playerRank)}! `;
+            }
+
+            // Dealer Qualification
+            const dealerQualifies = getHandRank(dealerHand) > 0 || dealerHand.some(card => card.value === 'Q' || card.value === 'K' || card.value === 'A');
+
+            if (!dealerQualifies) {
+                message += "Dealer does not qualify. You win the Ante Bet!";
+                winnings += anteBet * 2;
+            } else {
+                const result = compareHands(playerHand, dealerHand);
+
+                if (result === 1) {
+                    message += "You win!";
+                    winnings += anteBet * 2;
+                } else if (result === 0) {
+                    message += "It's a tie. Push.";
+                    winnings += anteBet;
+                } else {
+                    message += "Dealer wins.";
+                }
+            }
+
+            // Ante Bonus
+            if (playerRank >= 2) {
+                const anteBonusPayouts = [0, 0, 1, 4, 5];
+                const anteBonusWinnings = anteBet * anteBonusPayouts[playerRank - 2];
+                winnings += anteBonusWinnings;
+                if (anteBonusWinnings > 0) {
+                    message += ` Ante Bonus pays $${anteBonusWinnings} for a ${getHandRankName(playerRank)}!`;
+                }
+            }
+
+            updateBalance(winnings);
+
+            document.querySelector('.message').textContent = message;
+
+            document.getElementById('dealer-cards').innerHTML = `Dealer's Hand: 
+                ${dealerHand[0].value}${dealerHand[0].suit} 
+                ${dealerHand[1].value}${dealerHand[1].suit} 
+                ${dealerHand[2].value}${dealerHand[2].suit}`;
+
+            document.getElementById('add-money-button').classList.remove('hidden'); // Show the button after the round
+            disableBetInputs(false); // Re-enable inputs after the turn
+            isGameInProgress = false;
+        }
+
+        function foldHand() {
+            if (!isGameInProgress) {
+                alert("No game in progress.");
+                return;
+            }
+
+            document.getElementById('play-button').classList.add('hidden');
+            document.getElementById('fold-button').classList.add('hidden');
+            document.querySelector('.message').textContent = "You folded. Ante bet is forfeited.";
+            document.getElementById('add-money-button').classList.remove('hidden'); // Show the button after folding
+            disableBetInputs(false); // Re-enable inputs after folding
+            isGameInProgress = false;
+        }
+    </script>
+</body>
+</html>
